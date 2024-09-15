@@ -1,0 +1,106 @@
+
+.snappy-element[iscolliding] {
+    outline: 2px rgba(255, 0, 0, 0.5) solid;
+}
+
+.snappy-element[ismoving]:not([iscolliding]) {
+    outline: 2px rgba(0, 255, 0, 0.5) solid;
+}
+
+.snappy-element-content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.de-handles {
+    --de-handle-size: 24px;
+
+    position: absolute;
+    top: 0; right: 0; bottom: 0; left: 0;
+
+    button {
+        border: none;
+        background: transparent;
+    }
+}
+
+.snappy-element:hover {
+    .de-handles > button > svg {
+        opacity: 1;
+        transition: opacity 0.2s ease-in-out;
+    }
+}
+
+.de-handles > button > svg {
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+}
+
+.de-handles-tl {
+    position: absolute;
+    width: var(--de-handle-size);
+    height: var(--de-handle-size);
+    cursor: nw-resize;
+}
+
+.de-handles-tc {
+    position: absolute;
+    width: calc(100% - (2 * var(--de-handle-size)));
+    height: var(--de-handle-size);
+    left: var(--de-handle-size);
+    cursor: n-resize;
+}
+
+.de-handles-tr {
+    position: absolute;
+    width: var(--de-handle-size);
+    height: var(--de-handle-size);
+    right: 0;
+    cursor: ne-resize;
+}
+
+.de-handles-cl {
+    position: absolute;
+    width: var(--de-handle-size);
+    height: calc(100% - (2 * var(--de-handle-size)));
+    top: var(--de-handle-size);
+    cursor: w-resize;
+}
+
+.de-handles-cr {
+    position: absolute;
+    width: var(--de-handle-size);
+    height: calc(100% - (2 * var(--de-handle-size)));
+    top: var(--de-handle-size);
+    right: 0;
+    cursor: e-resize;
+}
+
+
+.de-handles-bl {
+    position: absolute;
+    width: var(--de-handle-size);
+    height: var(--de-handle-size);
+    left: 0;
+    bottom: 0;
+    cursor: sw-resize;
+}
+
+.de-handles-br {
+    position: absolute;
+    width: var(--de-handle-size);
+    height: var(--de-handle-size);
+    right: 0;
+    bottom: 0;
+    cursor: se-resize;
+}
+
+.de-handles-bc {
+    position: absolute;
+    width: calc(100% - (2 * var(--de-handle-size)));
+    height: var(--de-handle-size);
+    left: var(--de-handle-size);
+    bottom: 0;
+    cursor: s-resize;
+}

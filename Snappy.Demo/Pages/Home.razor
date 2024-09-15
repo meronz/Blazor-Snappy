@@ -1,0 +1,53 @@
+﻿@page "/"
+@using Snappy
+@using Snappy.Components
+<PageTitle>Home</PageTitle>
+
+<div class="w-100 h-100">
+    <h1>Snappable grid completely* made with Blazor.</h1>
+    <SnappyCanvas
+        TItem="Tile"
+        Items="_tiles"
+        ItemUpdated="ItemUpdated"
+        Width="1200px"
+        Height="1000px">
+        <ElementTemplate Context="tile">
+            <div class="card w-100 h-100">
+                <div class="card-header">
+                    @tile.Title
+                </div>
+                <div class="card-body">
+                    @tile.Content
+                </div>
+            </div>
+        </ElementTemplate>
+    </SnappyCanvas>
+    <p class="text-muted">*Except for one small JS method to get the canvas drawn size.</p>
+</div>
+
+
+@code
+{
+    public record Tile(int Id, string Title, string Content) : IDraggable
+    {
+        public Position Position { get; set; }
+        public Size Size { get; set; } = new(200, 200);
+    }
+
+    private List<Tile> _tiles = new List<Tile>
+    {
+        new Tile(1, "Tile 1", "Content 1") { Position = new(0, 0) },
+        new Tile(2, "Tile 2", "Content 2") { Position = new(0, 200) },
+        new Tile(3, "Tile 3", "Content 3") { Position = new(0, 400) },
+        new Tile(4, "Tile 4", "Content 4") { Position = new(0, 600) },
+        new Tile(5, "Tile 5", "Content 5") { Position = new(0, 800) },
+    };
+
+    private void ItemUpdated(SnappyCanvas<Tile>.ItemUpdatedEventArgs evt)
+    {
+        Console.WriteLine($"Tile {evt.Item.Id} updated");
+        var tile = _tiles.First(t => t.Id == evt.Item.Id);
+        tile.Position = evt.UpdatedPosition;
+        tile.Size = evt.UpdatedSize;
+    }
+}

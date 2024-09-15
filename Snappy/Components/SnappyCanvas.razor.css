@@ -1,0 +1,9 @@
+.snappy-canvas {
+    position: relative;
+    outline: 1px solid black;
+    transition: background 0.1s ease-in-out;
+}
+
+.snappy-canvas[ismoving] {
+    cursor: grabbing;
+}

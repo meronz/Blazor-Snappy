@@ -1,0 +1,255 @@
+@using System.Runtime.InteropServices.JavaScript
+@typeparam TItem where TItem : IDraggable
+@* @rendermode InteractiveWebAssembly *@
+
+
+<div id="@_canvasId"
+     class="snappy-canvas"
+     style="width: @Width; height: @Height;
+            @BackgroundStyle"
+     isediting="@(_movingElement is not null)"
+     ismoving="@IsMoving"
+     @onmousemove="OnMouseMove"
+     @onmouseup="OnMouseUp">
+    @foreach (var item in Items)
+    {
+        <SnappyElement
+            TItem="TItem"
+            @ref="_renderedElements[item]"
+            Item="item"
+            ElementTemplate="ElementTemplate"
+            OnDragStart="OnDragStart"
+            OnResizeStart="OnResizeStart"/>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Width { get; set; } = "1px";
+    [Parameter, EditorRequired] public string Height { get; set; } = "1px";
+    [Parameter] public int GridSizePx { get; set; } = 20;
+    [Parameter] public RenderFragment<TItem> ElementTemplate { get; set; } = default!;
+    [Parameter] public ICollection<TItem> Items { get; set; } = [];
+    [Parameter] public EventCallback<ItemUpdatedEventArgs> ItemUpdated { get; set; }
+    public record ItemUpdatedEventArgs(TItem Item, Position UpdatedPosition, Size UpdatedSize);
+
+    private string _canvasId = Guid.NewGuid().ToString();
+    private bool _isInitialized;
+    private Position _canvasPosition;
+    private Size _canvasSize;
+    private Position _dragStartPosition;
+
+    private Dictionary<TItem, SnappyElement<TItem>> _renderedElements = new();
+    private SnappyElement<TItem>? _movingElement = null;
+    private SnappyElement<TItem>? _resizingElement = null;
+    private ResizeDirection _resizeDirection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await JSHost.ImportAsync("SnappyCanvas", "/_content/Snappy/snappy.js");
+        _isInitialized = true;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            foreach (var item in Items)
+            {
+                item.Position.Clamp(_canvasSize, item.Size);
+                _renderedElements[item].UpdatePosition(item.Position, item.Size);
+            }
+        }
+        base.OnAfterRender(firstRender);
+
+        if (!firstRender && _isInitialized)
+        {
+            var elementPosition = ElementPositionFromString(
+                GetElementPosition(_canvasId));
+            _canvasPosition = elementPosition.Item1;
+            _canvasSize = elementPosition.Item2;
+        }
+    }
+
+    private void OnDragStart(SnappyElement<TItem> element, MouseEventArgs arg)
+    {
+        if (_movingElement is not null) return;
+
+        element.IsMoving = true;
+        _movingElement = element;
+        _dragStartPosition = new Position(arg.ClientX, arg.ClientY);
+    }
+
+    private void OnMouseUp(MouseEventArgs arg)
+    {
+        if (_movingElement is not null)
+        {
+            OnDragEnd(_movingElement, arg);
+        }
+
+        if (_resizingElement is not null)
+        {
+            OnResizeEnd(_resizingElement, arg);
+        }
+    }
+
+    private void OnDragEnd(SnappyElement<TItem> element, MouseEventArgs arg)
+    {
+        if (_movingElement != element) return;
+
+        var originalPosition = _movingElement.Item.Position;
+        var originalSize = _movingElement.Item.Size;
+        var currentPosition = _movingElement.CurrentPosition;
+        var currentSize = _movingElement.CurrentSize;
+
+        _movingElement.IsMoving = false;
+        if (_movingElement.IsColliding)
+        {
+            _movingElement.IsColliding = false;
+            _movingElement.UpdatePosition(originalPosition, originalSize);
+        }
+        else if (originalPosition != currentPosition || originalSize != currentSize)
+        {
+            ItemUpdated.InvokeAsync(new(_movingElement.Item, currentPosition, currentSize));
+        }
+
+        _movingElement = null;
+    }
+
+    private void OnMouseMove(MouseEventArgs evt)
+    {
+        if (IsMoving && _movingElement is not null)
+        {
+            OnMove(evt);
+        }
+
+        if (IsResizing && _resizingElement is not null)
+        {
+            OnResize(evt);
+        }
+    }
+
+    private void OnResizeStart(SnappyElement<TItem> element, MouseEventArgs evt, ResizeDirection direction)
+    {
+        if (_resizingElement is not null) return;
+
+        element.IsResizing = true;
+        _resizingElement = element;
+        _resizeDirection = direction;
+        _dragStartPosition = new Position(evt.ClientX, evt.ClientY);
+    }
+
+    private void OnResizeEnd(SnappyElement<TItem> element, MouseEventArgs arg)
+    {
+        if (_resizingElement is null) return;
+
+        element.IsResizing = false;
+        var originalPosition = element.Item.Position;
+        var originalSize = element.Item.Size;
+        var currentPosition = element.CurrentPosition;
+        var currentSize = element.CurrentSize;
+
+        if (originalPosition != currentPosition || originalSize != currentSize)
+        {
+            ItemUpdated.InvokeAsync(new(element.Item, currentPosition, currentSize));
+        }
+
+        _resizingElement.IsResizing = false;
+        _resizingElement = null;
+    }
+
+    private void OnMove(MouseEventArgs arg)
+    {
+        if (_movingElement == null) return;
+        var clientPosition = new Position(arg.ClientX, arg.ClientY);
+        var delta = clientPosition - _dragStartPosition;
+        var newPosition = _movingElement.Item.Position + delta;
+        newPosition.Clamp(_canvasSize, _movingElement.CurrentSize);
+        newPosition.SnapToGrid(GridSizePx);
+
+        var isColliding = false;
+        foreach (var item in Items)
+        {
+            if (ReferenceEquals(item, _movingElement.Item)) continue;
+            isColliding = item.OverlapsWith(newPosition, _movingElement.CurrentSize);
+            if (isColliding) break;
+        }
+
+        _movingElement.IsColliding = isColliding;
+        _movingElement.UpdatePosition(newPosition, _movingElement.CurrentSize);
+    }
+
+    private void OnResize(MouseEventArgs arg)
+    {
+        if (_resizingElement == null) return;
+
+        var currentPosition = _resizingElement.Item.Position;
+        var currentSize = _resizingElement.Item.Size;
+
+        var clientPosition = new Position(arg.ClientX, arg.ClientY);
+        var delta = clientPosition - _dragStartPosition;
+
+        switch (_resizeDirection)
+        {
+            case ResizeDirection.TopLeft:
+                currentPosition.Y += delta.Y;
+                currentPosition.X += delta.X;
+                currentSize.Width -= delta.X;
+                currentSize.Height -= delta.Y;
+                break;
+            case ResizeDirection.Top:
+                currentPosition.Y += delta.Y;
+                currentSize.Height -= delta.Y;
+                break;
+            case ResizeDirection.TopRight:
+                currentPosition.Y += delta.Y;
+                currentSize.Width += delta.X;
+                currentSize.Height -= delta.Y;
+                break;
+            case ResizeDirection.Left:
+                currentPosition.X += delta.X;
+                currentSize.Width -= delta.X;
+                break;
+            case ResizeDirection.Right:
+                currentSize.Width += delta.X;
+                break;
+            case ResizeDirection.BottomRight:
+                currentSize.Width += delta.X;
+                currentSize.Height += delta.Y;
+                break;
+            case ResizeDirection.Bottom:
+                currentSize.Height += delta.Y;
+                break;
+            case ResizeDirection.BottomLeft:
+                currentPosition.X += delta.X;
+                currentSize.Width -= delta.X;
+                currentSize.Height += delta.Y;
+                break;
+        }
+
+        currentPosition.Clamp(_canvasSize, currentSize);
+        currentPosition.SnapToGrid(GridSizePx);
+        currentSize.Clamp(_canvasSize, currentPosition);
+        currentSize.SnapToGrid(GridSizePx);
+
+        var isColliding = false;
+        foreach (var item in Items)
+        {
+            if (ReferenceEquals(item, _resizingElement.Item)) continue;
+            isColliding = item.OverlapsWith(currentPosition, currentSize);
+            if (isColliding) break;
+        }
+
+        _resizingElement.IsColliding = isColliding;
+        _resizingElement.UpdatePosition(currentPosition, currentSize);
+    }
+
+
+    private bool IsMoving => _movingElement is not null;
+    private bool IsResizing => _resizingElement is not null;
+
+    private string BackgroundStyle => IsMoving
+        ? $@"background: #fafafa radial-gradient(#cfcdcd 1px, transparent 0);
+             background-size: {GridSizePx}px {GridSizePx}px;
+             background-position: -{GridSizePx / 2}px {GridSizePx / 2}px;"
+        : "background: #fafafa";
+}
