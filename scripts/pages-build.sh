@@ -7,4 +7,4 @@ echo "dotnet installed!"
 ./dotnet/dotnet workload install wasm-tools
 
 echo "Build"
-./dotnet/dotnet publish src/Snappy.Demo/ -c Release -o output
+./dotnet/dotnet publish Snappy.Demo -c Release -o output
